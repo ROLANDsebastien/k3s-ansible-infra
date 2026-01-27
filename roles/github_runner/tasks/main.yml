@@ -1,6 +1,6 @@
 ---
 - name: Create runner directory
-  file:
+  ansible.builtin.file:
     path: /actions-runner
     state: directory
     owner: "{{ ansible_user }}"
@@ -8,55 +8,65 @@
     mode: '0755'
 
 - name: Detect Architecture
-  shell: dpkg --print-architecture
-  register: architecture
+  ansible.builtin.command: dpkg --print-architecture
+  register: github_runner_architecture_result
+  changed_when: false
 
 - name: Map Architecture
-  set_fact:
-    runner_arch: "{{ 'x64' if architecture.stdout == 'amd64' else architecture.stdout }}"
+  ansible.builtin.set_fact:
+    github_runner_arch: "{{ 'x64' if github_runner_architecture_result.stdout == 'amd64' else github_runner_architecture_result.stdout }}"
 
 - name: Download GitHub Runner
-  get_url:
-    url: "https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-{{ runner_arch }}-2.311.0.tar.gz"
+  ansible.builtin.get_url:
+    url: "https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-{{ github_runner_arch }}-2.311.0.tar.gz"
     dest: /actions-runner/actions-runner.tar.gz
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
+    mode: '0644'
 
 - name: Extract GitHub Runner
-  unarchive:
+  ansible.builtin.unarchive:
     src: /actions-runner/actions-runner.tar.gz
     dest: /actions-runner
-    remote_src: yes
+    remote_src: true
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
 
 - name: Install Dependencies
-  command: /actions-runner/bin/installdependencies.sh
+  ansible.builtin.command: /actions-runner/bin/installdependencies.sh
   args:
     chdir: /actions-runner
+  changed_when: true
 
 - name: Check if Runner is already configured
-  stat:
+  ansible.builtin.stat:
     path: /actions-runner/.runner
-  register: runner_configured
+  register: github_runner_configured_stat
 
 - name: Configure GitHub Runner
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
-  command: >
-    ./config.sh --url {{ github_repo_url }} --token {{ github_runner_token }} --unattended --replace --name "{{ inventory_hostname }}-runner" --labels self-hosted,linux,{{ architecture.stdout }}
+  ansible.builtin.command: >
+    ./config.sh --url {{ github_repo_url }}
+    --token {{ github_runner_token }}
+    --unattended --replace
+    --name "{{ inventory_hostname }}-runner"
+    --labels self-hosted,linux,{{ github_runner_architecture_result.stdout }}
   args:
     chdir: /actions-runner
-  when: not runner_configured.stat.exists
+  when: not github_runner_configured_stat.stat.exists
+  changed_when: true
 
 - name: Install Runner Service
-  command: ./svc.sh install
+  ansible.builtin.command: ./svc.sh install
   args:
     chdir: /actions-runner
-  ignore_errors: yes  # Ignore if service already exists
+  changed_when: true
+  failed_when: false  # Allow failure if service already exists
 
 - name: Start Runner Service
-  command: ./svc.sh start
+  ansible.builtin.command: ./svc.sh start
   args:
     chdir: /actions-runner
-  ignore_errors: yes  # Ignorer if already running
+  changed_when: true
+  failed_when: false  # Allow failure if already running

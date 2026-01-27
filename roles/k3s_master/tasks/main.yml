@@ -1,6 +1,7 @@
 ---
 - name: "Install K3S Master (Initial)"
-  shell: |
+  ansible.builtin.shell: |
+    set -o pipefail
     curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" sh -s - server \
     --tls-san {{ kube_vip_address }} \
     --write-kubeconfig-mode 644 \
@@ -10,19 +11,24 @@
     --node-taint node-role.kubernetes.io/master=true:NoSchedule
   args:
     creates: /usr/local/bin/k3s
+    executable: /bin/bash
+  # noqa: command-instead-of-module
 
 - name: "Wait for kubectl to be ready"
-  wait_for:
+  ansible.builtin.wait_for:
     path: /etc/rancher/k3s/k3s.yaml
 
 - name: "Deploy kube-vip RBAC"
-  command: kubectl apply -f https://kube-vip.io/manifests/rbac.yaml
+  ansible.builtin.command: kubectl apply -f https://kube-vip.io/manifests/rbac.yaml
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  register: kube_vip_rbac_result
+  changed_when: "'created' in kube_vip_rbac_result.stdout or 'configured' in kube_vip_rbac_result.stdout"
 
 - name: "Deploy kube-vip DaemonSet (via Binary)"
-  shell: |
-    KVVERSION=$(curl -sL https://api.github.com/repos/kube-vip/kube-vip/releases | grep  "tag_name" | head -1 | cut -d '"' -f 4)
+  ansible.builtin.shell: |
+    set -o pipefail
+    KVVERSION=$(curl -sL https://api.github.com/repos/kube-vip/kube-vip/releases | grep "tag_name" | head -1 | cut -d '"' -f 4)
     ARCH=$(uname -m)
     if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
     
@@ -40,12 +46,17 @@
     rm /tmp/kube-vip
   environment:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  args:
+    executable: /bin/bash
+  register: kube_vip_ds_result
+  changed_when: "'created' in kube_vip_ds_result.stdout or 'configured' in kube_vip_ds_result.stdout"
+  # noqa: command-instead-of-module risky-shell-pipe
 
 - name: "Fetch Token for Workers"
-  slurp:
+  ansible.builtin.slurp:
     src: /var/lib/rancher/k3s/server/node-token
-  register: node_token
+  register: k3s_master_node_token
 
 - name: "Export Token"
-  set_fact:
-    k3s_token: "{{ node_token.content | b64decode | trim }}"
+  ansible.builtin.set_fact:
+    k3s_master_token: "{{ k3s_master_node_token.content | b64decode | trim }}"
