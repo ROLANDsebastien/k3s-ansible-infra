@@ -1,9 +1,9 @@
 ---
 k3s_version: v1.31.5+k3s1
 ansible_user: ubuntu
-kube_vip_address: "192.168.2.100"
+kube_vip_address: ""
 network_interface: "enp0s1"
 
 # GitHub Runner Configuration
 github_repo_url: "https://github.com/YOUR_USER/k3s-services-deploy"
-github_runner_token: "YOUR_TOKEN_HERE"
+github_runner_token: "NONE"

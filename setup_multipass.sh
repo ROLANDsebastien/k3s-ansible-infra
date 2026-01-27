@@ -48,11 +48,17 @@ EOF
 # Detect Network Interface
 INTERFACE=$(multipass exec $MASTER_NAME -- ip route get 1 | awk '{print $5;exit}')
 
-# Update variables in group_vars/all.yml
-SUBNET=$(echo $MASTER_IP | cut -d "." -f 1-3)
-VIP="${SUBNET}.100"
+# GitHub Runner Configuration
+# To enable the runner, pass GITHUB_RUNNER_TOKEN as an environment variable
+if [ -z "$GITHUB_RUNNER_TOKEN" ]; then
+    echo "Warning: GITHUB_RUNNER_TOKEN not set. GitHub Runner will NOT be configured."
+    RUNNER_TOKEN="NONE"
+else
+    RUNNER_TOKEN="$GITHUB_RUNNER_TOKEN"
+    echo "GitHub Runner token detected. It will be configured in group_vars/all.yml."
+fi
 
-# Note: We add placeholders for GitHub Runner variables here
+# Update variables in group_vars/all.yml
 cat <<EOF > group_vars/all.yml
 ---
 k3s_version: v1.31.5+k3s1
@@ -62,7 +68,7 @@ network_interface: "$INTERFACE"
 
 # GitHub Runner Configuration
 github_repo_url: "https://github.com/YOUR_USER/k3s-services-deploy"
-github_runner_token: "YOUR_TOKEN_HERE"
+github_runner_token: "$RUNNER_TOKEN"
 EOF
 
 # Fetch and patch Kubeconfig
