@@ -1,0 +1,15 @@
+# System files
+.DS_Store
+.idea/
+.vscode/
+
+# Ansible
+*.retry
+*.log
+ansible_facts_cache/
+
+# Local Deployment (Multipass) generated files
+cloud-init.yaml
+k3s_multipass.yaml
+# Uncomment below if you don't want to commit your specific inventory
+# inventory.ini

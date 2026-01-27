@@ -1,0 +1,20 @@
+---
+- name: "Phase 1: Node Preparation"
+  hosts: k3s_cluster
+  become: yes
+  roles:
+    - common
+
+- name: "Phase 2: Master and kube-vip Configuration"
+  hosts: master
+  become: yes
+  roles:
+    - k3s_master
+    # Install GitHub Runner on Master node (Disabled until token is provided)
+    # - github_runner
+
+- name: "Phase 3: Join Workers"
+  hosts: workers
+  become: yes
+  roles:
+    - k3s_worker

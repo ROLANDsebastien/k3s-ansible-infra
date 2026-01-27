@@ -1,0 +1,10 @@
+#cloud-config
+ssh_authorized_keys:
+  - {{ SSH_KEY }}
+sudo: ['ALL=(ALL) NOPASSWD:ALL']
+groups: [sudo]
+shell: /bin/bash
+package_update: true
+packages:
+  - curl
+  - python3

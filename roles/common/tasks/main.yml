@@ -1,0 +1,23 @@
+---
+- name: "Verify connectivity"
+  ping:
+
+- name: "Install dependencies"
+  apt:
+    update_cache: yes
+    name:
+      - curl
+      - ca-certificates
+      - gnupg
+      - nfs-common
+    state: present
+
+- name: "Disable Swap"
+  command: swapoff -a
+  when: ansible_facts['swaptotal_mb'] > 0
+
+- name: "Remove Swap from fstab"
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+.*)$'
+    replace: '# \1'

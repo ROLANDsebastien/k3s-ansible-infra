@@ -1,0 +1,62 @@
+---
+- name: Create runner directory
+  file:
+    path: /actions-runner
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Detect Architecture
+  shell: dpkg --print-architecture
+  register: architecture
+
+- name: Map Architecture
+  set_fact:
+    runner_arch: "{{ 'x64' if architecture.stdout == 'amd64' else architecture.stdout }}"
+
+- name: Download GitHub Runner
+  get_url:
+    url: "https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-{{ runner_arch }}-2.311.0.tar.gz"
+    dest: /actions-runner/actions-runner.tar.gz
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Extract GitHub Runner
+  unarchive:
+    src: /actions-runner/actions-runner.tar.gz
+    dest: /actions-runner
+    remote_src: yes
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+
+- name: Install Dependencies
+  command: /actions-runner/bin/installdependencies.sh
+  args:
+    chdir: /actions-runner
+
+- name: Check if Runner is already configured
+  stat:
+    path: /actions-runner/.runner
+  register: runner_configured
+
+- name: Configure GitHub Runner
+  become: yes
+  become_user: "{{ ansible_user }}"
+  command: >
+    ./config.sh --url {{ github_repo_url }} --token {{ github_runner_token }} --unattended --replace --name "{{ inventory_hostname }}-runner" --labels self-hosted,linux,{{ architecture.stdout }}
+  args:
+    chdir: /actions-runner
+  when: not runner_configured.stat.exists
+
+- name: Install Runner Service
+  command: ./svc.sh install
+  args:
+    chdir: /actions-runner
+  ignore_errors: yes  # Ignore if service already exists
+
+- name: Start Runner Service
+  command: ./svc.sh start
+  args:
+    chdir: /actions-runner
+  ignore_errors: yes  # Ignorer if already running
