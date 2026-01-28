@@ -4,10 +4,14 @@
 MASTER_NAME="k3s-master-01"
 WORKER_PREFIX="k3s-worker"
 WORKER_COUNT=3
-SSH_KEY=$(cat ~/.ssh/id_rsa.pub)
+SSH_KEY=$(cat ~/.ssh/id_rsa.pub 2>/dev/null || cat ~/.ssh/id_ed25519.pub 2>/dev/null)
 
-# Check for reset flag
-# Always clean up existing VMs to prevent issues
+if [ -z "$SSH_KEY" ]; then
+    echo "Error: No SSH public key found in ~/.ssh/id_rsa.pub or ~/.ssh/id_ed25519.pub"
+    exit 1
+fi
+
+# Cleanup existing VMs
 echo "Cleaning up existing VMs..."
 multipass delete $MASTER_NAME 2>/dev/null
 for i in $(seq 1 $WORKER_COUNT); do
@@ -19,18 +23,26 @@ multipass purge
 echo "Cleanup complete."
 
 # Create cloud-init file from template
-sed "s|{{ SSH_KEY }}|$SSH_KEY|g" cloud-init.yaml.tmpl > cloud-init.yaml
+cat <<EOF > cloud-init.yaml
+#cloud-config
+ssh_authorized_keys:
+  - $SSH_KEY
+sudo: ['ALL=(ALL) NOPASSWD:ALL']
+groups: [sudo]
+shell: /bin/bash
+EOF
 
 echo "Creating VMs (this might take a few minutes)..."
+echo "Launching $MASTER_NAME (2 CPUs, 3G RAM)..."
 multipass launch --name $MASTER_NAME --cpus 2 --memory 3G --disk 10G --cloud-init cloud-init.yaml 22.04
 
 for i in $(seq 1 $WORKER_COUNT); do
     NAME="${WORKER_PREFIX}-0${i}"
+    echo "Launching $NAME (1 CPU, 3G RAM)..."
+    # Added a small sleep to avoid overlapping heavy initialization
+    sleep 2
     multipass launch --name $NAME --cpus 1 --memory 3G --disk 10G --cloud-init cloud-init.yaml 22.04
 done
-
-echo "Waiting for VMs to be ready..."
-# No longer need wait as they are sequential
 
 echo "Fetching IPs and Generating Ansible Inventory..."
 MASTER_IP=$(multipass info $MASTER_NAME --format csv | grep $MASTER_NAME | cut -d ',' -f 3)
@@ -60,17 +72,19 @@ EOF
 # Detect Network Interface
 INTERFACE=$(multipass exec $MASTER_NAME -- ip route get 1 | awk '{print $5;exit}')
 
+# VIP setup (Point to Master IP for dev)
+VIP=$MASTER_IP
+
 # GitHub Runner Configuration
-# To enable the runner, pass GITHUB_RUNNER_TOKEN as an environment variable
 if [ -z "$GITHUB_RUNNER_TOKEN" ]; then
     echo "Warning: GITHUB_RUNNER_TOKEN not set. GitHub Runner will NOT be configured."
     RUNNER_TOKEN="NONE"
 else
     RUNNER_TOKEN="$GITHUB_RUNNER_TOKEN"
-    echo "GitHub Runner token detected. It will be configured in group_vars/all.yml."
 fi
 
 # Update variables in group_vars/all.yml
+mkdir -p group_vars
 cat <<EOF > group_vars/all.yml
 ---
 k3s_version: v1.31.5+k3s1
@@ -83,9 +97,6 @@ github_repo_url: "https://github.com/YOUR_USER/k3s-services-deploy"
 github_runner_token: "$RUNNER_TOKEN"
 EOF
 
-# Fetch and patch Kubeconfig logic moved to Ansible
-echo "Kubeconfig will be fetched by Ansible in the next step."
-
 echo ""
 echo "Configuration Ready!"
 echo "Master IP: $MASTER_IP"
@@ -93,5 +104,4 @@ echo "Target VIP: $VIP"
 echo "Interface: $INTERFACE"
 echo "---------------------------------------"
 echo "Next step: ansible-playbook playbook.yml"
-echo "After Ansible finishes, your kubeconfig will be at: ./k3s_multipass.yaml"
 echo "---------------------------------------"

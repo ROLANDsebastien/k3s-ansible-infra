@@ -25,32 +25,11 @@
   register: k3s_master_kube_vip_rbac_result
   changed_when: "'created' in k3s_master_kube_vip_rbac_result.stdout or 'configured' in k3s_master_kube_vip_rbac_result.stdout"
 
-- name: "Deploy kube-vip DaemonSet (via Binary)"
-  ansible.builtin.shell: |
-    set -o pipefail
-    KVVERSION=$(curl -sL https://api.github.com/repos/kube-vip/kube-vip/releases | grep "tag_name" | head -1 | cut -d '"' -f 4)
-    ARCH=$(uname -m)
-    if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
-
-    curl -sL https://github.com/kube-vip/kube-vip/releases/download/$KVVERSION/kube-vip_linux_$ARCH -o /tmp/kube-vip
-    chmod +x /tmp/kube-vip
-
-    /tmp/kube-vip manifest daemonset \
-        --address {{ kube_vip_address }} \
-        --interface {{ network_interface }} \
-        --authority \
-        --controlplane \
-        --arp \
-        --leaderElection | kubectl apply -f -
-
-    rm /tmp/kube-vip
-  environment:
-    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-  args:
-    executable: /bin/bash
-  register: k3s_master_kube_vip_ds_result
-  changed_when: "'created' in k3s_master_kube_vip_ds_result.stdout or 'configured' in k3s_master_kube_vip_ds_result.stdout"
-  # noqa: command-instead-of-module risky-shell-pipe
+- name: "Deploy kube-vip DaemonSet (via Template)"
+  ansible.builtin.template:
+    src: kube-vip.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+    mode: '0644'
 
 - name: "Fetch Token for Workers"
   ansible.builtin.slurp:
