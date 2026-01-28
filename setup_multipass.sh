@@ -6,11 +6,23 @@ WORKER_PREFIX="k3s-worker"
 WORKER_COUNT=3
 SSH_KEY=$(cat ~/.ssh/id_rsa.pub)
 
+# Check for reset flag
+# Always clean up existing VMs to prevent issues
+echo "Cleaning up existing VMs..."
+multipass delete $MASTER_NAME 2>/dev/null
+for i in $(seq 1 $WORKER_COUNT); do
+    NAME="${WORKER_PREFIX}-0${i}"
+    multipass delete $NAME 2>/dev/null
+done
+echo "Purging deleted VMs..."
+multipass purge
+echo "Cleanup complete."
+
 # Create cloud-init file from template
 sed "s|{{ SSH_KEY }}|$SSH_KEY|g" cloud-init.yaml.tmpl > cloud-init.yaml
 
 echo "Creating VMs (this might take a few minutes)..."
-multipass launch --name $MASTER_NAME --cpus 2 --memory 2G --disk 10G --cloud-init cloud-init.yaml 22.04
+multipass launch --name $MASTER_NAME --cpus 2 --memory 3G --disk 10G --cloud-init cloud-init.yaml 22.04
 
 for i in $(seq 1 $WORKER_COUNT); do
     NAME="${WORKER_PREFIX}-0${i}"
@@ -71,11 +83,8 @@ github_repo_url: "https://github.com/YOUR_USER/k3s-services-deploy"
 github_runner_token: "$RUNNER_TOKEN"
 EOF
 
-# Fetch and patch Kubeconfig
-echo "Fetching Kubeconfig..."
-mkdir -p ~/.kube
-multipass exec $MASTER_NAME sudo cat /etc/rancher/k3s/k3s.yaml > k3s_multipass.yaml
-sed -i '' "s/127.0.0.1/$MASTER_IP/g" k3s_multipass.yaml
+# Fetch and patch Kubeconfig logic moved to Ansible
+echo "Kubeconfig will be fetched by Ansible in the next step."
 
 echo ""
 echo "Configuration Ready!"
@@ -84,4 +93,5 @@ echo "Target VIP: $VIP"
 echo "Interface: $INTERFACE"
 echo "---------------------------------------"
 echo "Next step: ansible-playbook playbook.yml"
+echo "After Ansible finishes, your kubeconfig will be at: ./k3s_multipass.yaml"
 echo "---------------------------------------"
