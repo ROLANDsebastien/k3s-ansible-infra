@@ -1,4 +1,11 @@
 ---
+- name: "Verify K3s Master Token"
+  ansible.builtin.assert:
+    that:
+      - hostvars[groups['master'][0]]['k3s_master_token'] is defined
+      - hostvars[groups['master'][0]]['k3s_master_token'] | length > 0
+    fail_msg: "K3s Master Token is missing. This usually means the Master setup failed. Check the logs for the Master node."
+
 - name: "Install K3S on Workers"
   ansible.builtin.shell: |
     set -o pipefail
