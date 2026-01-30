@@ -2,17 +2,67 @@
 - name: "Verify connectivity"
   ansible.builtin.ping:
 
-- name: "Install dependencies"
+- name: "Ensure hostname is set"
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  when: ansible_facts['hostname'] == "localhost" or ansible_facts['hostname'] == ""
+
+- name: "Wait for cloud-init to complete"
+  ansible.builtin.command: cloud-init status --wait
+  changed_when: false
+  failed_when: false
+  timeout: 600
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: "Wait for apt lock to be released"
+  ansible.builtin.shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+      echo "Waiting for apt lock to be released..."
+      sleep 2
+    done
+  changed_when: false
+  retries: 60
+  delay: 5
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: "Update package cache (Debian/Ubuntu)"
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
     lock_timeout: 300
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: "Install dependencies (Debian/Ubuntu)"
+  ansible.builtin.apt:
     name:
       - curl
       - ca-certificates
       - gnupg
       - nfs-common
     state: present
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: "Install dependencies (RedHat/CentOS/Rocky/Fedora)"
+  ansible.builtin.package:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg2
+      - nfs-utils
+    state: present
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: "Install dependencies (Suse/openSUSE)"
+  ansible.builtin.zypper:
+    name:
+      - curl
+      - ca-certificates
+      - gpg2
+      - nfs-utils
+    state: present
+  when: ansible_facts['os_family'] == "Suse"
 
 - name: "Disable Swap"
   ansible.builtin.command: swapoff -a

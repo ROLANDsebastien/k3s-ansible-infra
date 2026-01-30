@@ -8,6 +8,7 @@
 - name: "Phase 2: Master and kube-vip Configuration"
   hosts: master
   become: true
+  serial: 1
   roles:
     - k3s_master
     # Install GitHub Runner on Master node (Disabled until token is provided)

@@ -50,7 +50,7 @@ MASTER_IP=$(multipass info $MASTER_NAME --format csv | grep $MASTER_NAME | cut -
 # Start generating inventory.ini
 cat <<EOF > inventory.ini
 [master]
-$MASTER_NAME ansible_host=$MASTER_IP ansible_user=ubuntu
+$MASTER_NAME ansible_host=$MASTER_IP ansible_user=ubuntu cluster_init=true
 
 [workers]
 EOF
@@ -91,6 +91,9 @@ k3s_version: v1.31.5+k3s1
 ansible_user: ubuntu
 kube_vip_address: "$VIP"
 network_interface: "$INTERFACE"
+cluster_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/16"
+k3s_domain: "k3s-multipass.local"
 
 # GitHub Runner Configuration
 github_repo_url: "https://github.com/YOUR_USER/k3s-services-deploy"

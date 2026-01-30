@@ -6,14 +6,35 @@
       - hostvars[groups['master'][0]]['k3s_master_token'] | length > 0
     fail_msg: "K3s Master Token is missing. This usually means the Master setup failed. Check the logs for the Master node."
 
+- name: "Set K3s binary suffix"
+  ansible.builtin.set_fact:
+    k3s_suffix: "{{ '-arm64' if ansible_facts['architecture'] in ['aarch64', 'arm64'] else '' }}"
+
+- name: "Download K3s Binary locally on Management Machine"
+  ansible.builtin.get_url:
+    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s{{ k3s_suffix }}"
+    dest: "/tmp/k3s-{{ k3s_version }}{{ k3s_suffix }}"
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+
+- name: "Push K3S Binary to Workers"
+  ansible.builtin.copy:
+    src: "/tmp/k3s-{{ k3s_version }}{{ k3s_suffix }}"
+    dest: /usr/local/bin/k3s
+    mode: '0755'
+    owner: root
+    group: root
+
 - name: "Install K3S on Workers"
   ansible.builtin.shell: |
     set -o pipefail
     curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" \
-    K3S_URL="https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443" \
+    K3S_URL="https://{{ kube_vip_address }}:6443" \
     K3S_TOKEN="{{ hostvars[groups['master'][0]]['k3s_master_token'] }}" \
+    INSTALL_K3S_SKIP_DOWNLOAD=true \
     sh -
   args:
-    creates: /usr/local/bin/k3s
+    creates: /etc/systemd/system/k3s-agent.service
     executable: /bin/bash
   # noqa: command-instead-of-module
